@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<!-- This application was created using spyre (https://github.com/adamhajari/spyre),
+		a web application framework for python created by Adam Hajari -->
+		
+		<!-- load styles -->
+		<style>{{d3css}}</style>
+		<style>{{css}}</style>
+		<style>{{custom_css}}</style>
+		<title>{{title}}</title>
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<!-- load javascript -->
+		<script type='text/javascript'>{{js}}</script>
+
+		<script type='text/javascript'>
+			{{d3js}}
+
+			function updateSharedParameters(){
+				var shared_params = "";
+				{% for input in inputs -%}
+					{% if input['type']=="radiobuttons" -%}
+						var {{input['key']}} = $('input[name="{{input['key']}}"]:checked').val();
+					{% elif input['type']=="checkboxgroup" -%}
+						var {{input['key']}} = new Array();
+						{{input['key']}}.push("__list__");
+						$.each($('input[name="{{input['key']}}"]:checked'), function() {
+							{{input['key']}}.push($(this).val());
+						});
+					{% elif input['type']=="multiple" -%}
+						var {{input['key']}} = new Array();
+						{{input['key']}}.push("__list__");
+						$.each($("#{{input['key']}}").val(), function() {
+							{{input['key']}}.push($(this)[0]);
+						});
+					{% elif input['type']=="slider" -%}
+						var {{input['key']}} = "__float__".concat($("#{{input['key']}}").val());
+					{% else %}
+						var {{input['key']}} = $("#{{input['key']}}").val();
+					{%- endif %}
+					shared_params = shared_params+"{{input['key']}}="+{{input['key']}}+"&";
+				{%- endfor %}
+				if (typeof shared_params_old !== 'undefined' && shared_params_old!==shared_params) {
+				    history.pushState('','','?'+shared_params);
+				}
+				shared_params_old = shared_params;
+				return encodeURI(shared_params);
+			}
+			// when an input value changes, executes the action id and/or updates any linked variables
+			// key/action_id is the name/action_id of variable being actively changed
+			// referenced_by is either 'id' (for text, dropdown, or slider) or 'name' (for checkboxgroup or radiobuttons)
+			// linked_type and linked_key are for the element being passively updated
+			function inputChange( key, referenced_by, linked_type, linked_key, linked_value, action_id ){
+				var value = "";
+				if (linked_value !== '') {
+				    value = linked_value;
+				}else if(referenced_by==='name'){
+					var elements = document.getElementsByName(key);
+					for (var i = elements.length - 1; i >= 0; i--) {
+						if(elements[i].checked){
+							value += elements[i].value;
+						}
+					};
+				}else{
+					value = document.getElementById(key).value;
+				}
+				updateInputValue(linked_type,linked_key,value,action_id);
+			}
+
+			// used to update input values on the fly
+			// type, key, and action_id are all defined in the Spyre App
+			// for text value should be a string
+			// for checkboxgroups value should be a list of values corresponding to the options defined in the spyre app
+			// for dropdowns value should be a string corresponding to one of the options defined in the spyre App
+			// for sliders value should be a number in the range specified in the Spyre App
+			function updateInputValue(type,key,value,action_id){
+				if(type=="text"){
+					document.getElementById(key).value=value;
+				}else if(type=="searchbox"){
+					document.getElementById(key).value=value;
+				}else if(type=="radiobuttons"){
+					elements = document.getElementsByName(key);
+					for (var i = elements.length - 1; i >= 0; i--) {
+						if(elements[i].value==value){
+							elements[i].checked=true;
+							break;
+						}
+					};
+				}else if(type=="checkboxgroup"){
+					elements = document.getElementsByName(key);
+					for (var i = elements.length - 1; i >= 0; i--) {
+						elements[i].checked = false;
+						for (var j = value.length - 1; j >= 0; j--) {
+							if(elements[i].value==value[j]){
+								elements[i].checked = true;
+								break;
+							}
+						};
+					};
+				}else if(type=="multiple"){
+                    elements = document.getElementById(key).value=value;
+					for (var i = elements.length - 1; i >= 0; i--) {
+						if(elements[i].value==value){
+							elements[i].selected=true;
+							break;
+						}
+					};
+				}else if(type=="dropdown"){
+					elements = document.getElementById(key).value=value;
+					for (var i = elements.length - 1; i >= 0; i--) {
+						if(elements[i].value==value){
+							elements[i].selected=true;
+							break;
+						}
+					};
+				}else if(type=="slider"){
+					document.getElementById(key).value=value;
+					document.getElementById(key+"_value").value=value;
+				}else{
+					console.log("Unknow input type: "+type)
+				}
+				if (typeof action_id !== 'undefined') {
+				    eval(action_id+"()");
+				}
+			}
+
+			// connect controller function to output functions
+			{%- for control in controls %}
+				function {{control['id']}}(){
+					{% for output in outputs %}
+						{% if output['control_id']==control['id'] -%}
+							{{output['id']}}()
+						{%- endif %}
+					{%- endfor %}
+				}
+			{% endfor %}
+
+			// define output functions
+			{%- for output in outputs %}
+				{%- if output['type']=='plot' %}
+					// load plot function
+					function {{output['id']}}(){
+						var spinning_wheel = $("<img />").attr('src', "{{prefix}}/spinning_wheel");
+						$("#{{output['id']}}").html(spinning_wheel);
+
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						
+						var plot = $("<img />").attr('src', "plot?"+params).load(function(){
+							$("#{{output['id']}}").html("");
+							$("#{{output['id']}}").append(plot)
+						});
+					}
+				{%- endif %}
+
+				{%- if output['type']=='image' %}
+					// load image function
+					function {{output['id']}}(){
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						var img = $("<img />").attr('src', "image?"+params);
+						$("#{{output['id']}}").html(img);
+					}
+				{%- endif %}
+
+				{%- if output['type']=='html' %}
+					// custom html function
+					function {{output['id']}}(){
+						var spinning_wheel = $("<img />").attr('src', "{{prefix}}/spinning_wheel");
+						$("#{{output['id']}}").html(spinning_wheel);
+
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						$.ajax({
+							url : "html?"+params,
+							success: function(response, textStatus, jqXHR){
+								$("#{{output['id']}}").html(response);
+							}
+						});
+					}
+				{%- endif %}
+
+				{%- if output['type']=='table' %}
+					// table output function
+					function {{output['id']}}(){
+						var spinning_wheel = $("<img />").attr('src', "{{prefix}}/spinning_wheel");
+						$("#{{output['id']}}").html(spinning_wheel);
+						updateSharedParameters()
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						$.ajax({
+							type: 'GET',
+							url : "table?"+params
+						}).done(function(response){
+							$("#{{output['id']}}").html(response);
+							{%- if output['sortable'] is defined %}
+								{%- if output['sortable'] %}
+									initTable("sortable");
+								{%- endif %}
+							{%- endif %}
+						});
+					}
+				{%- endif %}
+
+				{%- if output['type']=='download' %}
+					// custom html function
+					function {{output['id']}}(){
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						window.location = "download?"+params;
+					}
+				{%- endif %}
+
+
+				{%- if output['type']=='no_output' %}
+					// no_output output function
+					function {{output['id']}}(){
+						updateSharedParameters()
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						$.ajax({
+							type: 'GET',
+							url : "no_output?"+params
+						}).done(function(){
+							{% if output['alert_message'] is defined %} alert("{{output['alert_message']}}"); {% endif %}
+						});
+					}
+				{%- endif %}
+
+				{%- if output['type']=='json' %}
+					function {{output['id']}}(){
+						var params = updateSharedParameters();
+						params = params+"output_id={{output['id']}}&";
+						$.ajax({
+							url : "data?"+params,
+							success: function(response, textStatus, jqXHR){
+								$("#{{output['id']}}").html(response);
+							}
+						});
+					}
+				{%- endif %}
+
+				{%- if output['type']=='d3' %}
+					function {{output['id']}}(){
+						show_d3_plot()					
+					}
+				{%- endif %}
+			{%- endfor %}
+
+			// custom function for handling d3 plots
+			function show_d3_plot(){
+				var params = updateSharedParameters();
+				$.ajax({
+					url : "/data?"+params,
+					success: function(response, textStatus, jqXHR)
+					{	
+						$("#chart").empty();
+						var data = response.data;
+						draw(data);
+					}
+				});
+			};
+			
+			$(document).ready(function() {
+				// jquery for tabs
+				jQuery('.tabs .tab-links a').on('click', function(e)  {
+					var currentAttrValue = jQuery(this).attr('href');
+					jQuery('.tabs ' + currentAttrValue).show().siblings().hide();  // Show/Hide Tabs
+					jQuery(this).parent('li').addClass('active').siblings().removeClass('active');  // Change/remove current tab to active
+					e.preventDefault();
+    			});
+
+				// Apply the CSS properties in the 'styles' map where the key in the map is 
+				// a JQuery selector and the values are maps of CSS property names to values
+				{% for selector in styles -%}
+					$("{{selector}}").css({{styles[selector]}});
+				{%- endfor %}
+				
+				{% for input in inputs -%}
+					{% if input['type']=="slider" -%}
+					// jquery for sliders
+						// update slider text box when slider moves
+						jQuery("#{{input['key']}}").on('change mousemove', function(e)  {
+							$("#{{input['key']}}_value").val($("#{{input['key']}}").val())
+		    			});
+		    			$("#{{input['key']}}_value").val($("#{{input['key']}}").val())
+
+		    			// update slider position when text box changes
+		    			jQuery("#{{input['key']}}_value").on('change keyup', function(e)  {
+							$("#{{input['key']}}").val($("#{{input['key']}}_value").val())
+		    			});
+		    			$("#{{input['key']}}").val($("#{{input['key']}}_value").val())
+		    		{%- endif %}
+				{%- endfor %}
+
+				// connect controller functions to controllers
+				{%- for control in controls %}
+					$("#{{control['id']}}").click(function(e) {
+						{{control['id']}}()
+					});
+				{%- endfor %}
+
+				$("#share_url").click(function(e) {
+					url = document.location.origin+document.location.pathname+"?"+updateSharedParameters();
+					window.prompt("", url);
+				});
+
+				{% for output in outputs -%}
+					{%- if output['on_page_load'] or output['on_page_load'] is not defined %}
+					{{output['id']}}()  // if on_page_load is true, load when page loads
+					{%- endif %}
+				{%- endfor %}
+			});
+		</script>
+		{{custom_head}}
+		<script type='text/javascript'>
+			{{custom_js}}
+		</script>
+	</head>
+
+	<body>
+		<div class="container">
+
+			{% block banner %}<!-- banner -->{% endblock %}
+
+			{% if app_bar %}
+				<div class="apptabs">
+					<ul class="apptab-links">
+						{% for route, text in app_bar %}
+							<li>
+								<a href="{{route}}">{{text}}</a>
+							</li>
+						{% endfor %}
+					</ul>
+				</div>
+			{% endif %}
+
+
+
+			<!-- control panel -->
+			<div class="menu">
+				<h1>{{title}}</h1>
+				<!-- inputs -->
+				{%- for input in inputs %}
+					{% if input['type']=="text" -%}
+						<div class="spyrePad--vertS">
+							<!-- text input -->
+							<form action="javascript:inputChange( '{{input['key']}}', 'id', '{{input['linked_type']}}', '{{input['linked_key']}}', '{{input['linked_value']}}', '{{input['action_id']}}');">
+								<div class="text_input">
+									{% if input['label'] is defined %}
+										{{input['label']}}:
+									{% endif %}
+									<input type="text" value="{{input['value']}}" id="{{input['key']}}" />
+								</div>
+							</form>
+						</div>
+
+					<!-- searchbox -->
+					{% elif input['type']=="searchbox" -%}
+						<script src="https://code.jquery.com/ui/1.12.0/jquery-ui.js"></script>
+  						<link rel="stylesheet" href="//code.jquery.com/ui/1.12.0/themes/base/jquery-ui.css">
+						<script>
+							$( function() {
+							var availableTags = [
+								{% for option in input['options'] -%}
+									"{{option}}",
+								{%- endfor %}
+							];
+							{% if not 'output_id' in input -%}
+								// if there's not output_id specified, this is a frontend search and should use
+								// values specified in the options dict
+								$( "#{{input['key']}}" ).autocomplete({
+								  source: availableTags
+								}); 
+							{% else -%}	
+								$("#{{input['key']}}").autocomplete({
+									delay: 100,
+									minLength: 2,
+									source: function(request, response) {
+										$.getJSON("data?"+updateSharedParameters(), {
+											output_id: "{{input['output_id']}}",
+											q: request.term
+										}, function(data) {
+											// data is an array of objects and must be transformed for autocomplete to use
+											var array = data.error ? [] : $.map(data.data, function(s) {
+												return {
+													label: s.label
+												};
+											});
+											response(array);
+										});
+									},
+									focus: function(event, ui) {
+										// prevent autocomplete from updating the textbox
+										event.preventDefault();
+									},
+									select: function(event, ui) {
+										// prevent autocomplete from updating the textbox
+										event.preventDefault();
+										document.getElementById("{{input['key']}}").value=ui.item.label;
+										inputChange( '{{input['key']}}', 'id', '{{input['linked_type']}}', '{{input['linked_key']}}', '{{input['linked_value']}}', '{{input['action_id']}}'); 
+									}
+								});
+							{% endif %}
+							});
+						</script>
+
+						<!-- searchbox -->
+						<div class="spyrePad--vertS">
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							<input type="searchbox" id="{{input['key']}}" value="{{input['value']}}" >
+						</div>
+
+					<!-- dropdown -->
+					{% elif input['type']=="dropdown" -%}
+						<!-- dropdown menu -->
+						<div class="spyrePad--vertS">
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							<select id="{{input['key']}}"  onchange="inputChange( '{{input['key']}}', 'id', '{{input['linked_type']}}', '{{input['linked_key']}}', '{{input['linked_value']}}', '{{input['action_id']}}');" >
+								{% for option in input['options'] -%}
+									<option value="{{option['value']}}" {% if option['checked']==True %} selected="selected" {% endif %}>{{option['label']}}</option>
+								{%- endfor %}
+							</select>
+						</div>
+
+					<!-- radiobuttons -->
+					{% elif input['type']=="radiobuttons" -%}
+						<div
+							class="spyrePad--vertS"
+							id="{{input['key']}}"
+						>
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							{% for option in input['options'] -%}
+								<div>
+									<input type="radio" name="{{input['key']}}" value="{{option['value']}}" {% if option['checked']==True %} checked {% endif %} onclick="inputChange( '{{input['key']}}', 'name', '{{input['linked_type']}}', '{{input['linked_key']}}', '{{input['linked_value']}}', '{{input['action_id']}}');">
+									{{option['label']}}
+								</div>
+							{%- endfor %}
+						</div>
+
+					<!-- checkbox group -->
+					{% elif input['type']=="checkboxgroup" -%}
+						<div
+							class="spyrePad--vertS"
+							id="{{input['key']}}"
+						>
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							{% for option in input['options'] -%}
+								<div>
+									<input 
+										type="checkbox" 
+										name="{{input['key']}}" 
+										value="{{option['value']}}" 
+										{% if option['checked']==True %} 
+											checked 
+										{% endif %} 
+										onclick="inputChange( 
+											'{{input['key']}}', 
+											'name', 
+											'{{input['linked_type']}}', 
+											'{{input['linked_key']}}', 
+											'{{input['linked_value']}}', 
+											'{{input['action_id']}}'
+											);"
+									>
+									{{option['label']}}
+								</div>
+							{%- endfor %}
+						</div>
+
+					<!-- select multiple -->
+					{% elif input['type']=="multiple" -%}
+						<!-- multiple select box -->
+						<div class="multselect_input">
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							<select multiple 
+								id="{{input['key']}}"  
+								onchange="inputChange( 
+									'{{input['key']}}', 
+									'id', 
+									'{{input['linked_type']}}', 
+									'{{input['linked_key']}}', 
+									'{{input['linked_value']}}', 
+									'{{input['action_id']}}'
+									);" 
+							>
+							{% for option in input['options'] -%}
+								<option value="{{option['value']}}" {% if option['checked']==True %} selected="selected" {% endif %}>{{option['label']}} </option>
+							{%- endfor %}
+							</select>
+						</div>
+
+					<!-- sliders -->
+					{% elif input['type']=="slider" -%}
+						<div class="spyrePad--vertS">
+							{% if input['label'] is defined %}
+								{{input['label']}}:
+							{% endif %}
+							<div class="slider container">
+								<input type="text" class="slider_value" id="{{input['key']}}_value" value="{{input['value']}}" onchange="inputChange( '{{input['key']}}', '{{input['linked_type']}}', '{{input['linked_key']}}',  '{{input['linked_value']}}','{{input['action_id']}}');">
+								<input type="range" class="slider_slider" id="{{input['key']}}" min="{{input['min']}}" max="{{input['max']}}" step="{{input['step']}}"  value="{{input['value']}}" onchange="inputChange( '{{input['key']}}', 'id', '{{input['linked_type']}}', '{{input['linked_key']}}', '{{input['linked_value']}}', '{{input['action_id']}}');" />
+							</div>
+						</div>
+					{%- endif %}
+				{%- endfor %}
+
+				<!-- buttons -->
+				{%- for control in controls %}
+					{% if control['type']=="button" -%}
+						<div class="spyrePad--vertXS">
+							<div class="button" id="{{control['id']}}" >
+								{{control['label']}}
+							</div>
+						</div>
+					{%- endif %}
+					{% if control['type']=="upload" -%}
+						<div class="spyrePad--vertXS">
+							<div class="box">
+								<input type="file" name="file-1" id="file-1" class="inputfile inputfile-1" data-multiple-caption="{count} files selected" multiple />
+								<label for="file-1"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="17" viewBox="0 0 20 17"><path d="M10 0l-5.2 4.9h3.3v5.1h3.8v-5.1h3.3l-5.2-4.9zm9.3 11.5l-3.2-2.1h-2l3.4 2.6h-3.5c-.1 0-.2.1-.2.1l-.8 2.3h-6l-.8-2.2c-.1-.1-.1-.2-.2-.2h-3.6l3.4-2.6h-2l-3.2 2.1c-.4.3-.7 1-.6 1.5l.6 3.1c.1.5.7.9 1.2.9h16.3c.6 0 1.1-.4 1.3-.9l.6-3.1c.1-.5-.2-1.2-.7-1.5z"/></svg> <span>Choose a file&hellip;</span></label>
+							</div>
+						</div>
+						<script>
+							'use strict';
+							;( function ( document, window, index ){
+								var inputs = document.querySelectorAll( '.inputfile' );
+								Array.prototype.forEach.call( inputs, function( input ){
+									var label	 = input.nextElementSibling,
+										labelVal = label.innerHTML;
+
+									input.addEventListener( 'change', function( e ){
+										var fileName = '';
+										fileName = e.target.value.split( '\\' ).pop();
+										if( fileName ){
+											label.querySelector( 'span' ).innerHTML = fileName;
+											//disable the default form submission
+											var data = new FormData();
+											jQuery.each(jQuery('#file-1')[0].files, function(i, file) {
+												data.append('xfile', file);
+											});
+
+											$.ajax({
+												url: '/upload',
+												type: 'POST',
+												data: data,
+												async: false,
+												cache: false,
+												contentType: false,
+												processData: false,
+												success: function () {
+												    
+												},
+												error: function(){
+												    alert("error in file upload");
+												}
+											});
+										}
+										else{
+											label.innerHTML = labelVal;
+										}
+									});
+
+									// Firefox bug fix
+									input.addEventListener( 'focus', function(){ input.classList.add( 'has-focus' ); });
+									input.addEventListener( 'blur', function(){ input.classList.remove( 'has-focus' ); });
+								});
+							}( document, window, 0 ));
+						</script>
+					{%- endif %}
+				{%- endfor %}
+				{% if False -%}
+					<div class="spyrePad--vertXS">
+						<div class="button" id="share_url" >
+							Generate Sharable URL
+						</div>
+					</div>
+				{%- endif %}
+			</div>
+
+			<!-- output -->
+			<div class="content">
+				<img scr="">
+				{% if tabs is defined -%}
+					<div class="tabs">
+						<ul class="tab-links">
+							{% for tab in tabs -%}
+								{% if loop.index == 1 -%}
+									<li class="active">
+										<a href="#{{tab}}">{{tab}}</a>
+									</li>
+								{% else -%}
+									<li>
+										<a href="#{{tab}}">{{tab}}</a>
+									</li>
+								{%- endif %}
+							{%- endfor %}
+						</ul>
+
+						<div class="tab-content">
+							{% for tab in tabs -%}
+								<div id="{{tab}}" class="tab {%- if loop.index == 1 %} active {%- endif %}">
+									{%- for output in outputs %}
+										{%- if output['tab'] == tab %}
+											{%- if output['type'] != "d3" %}
+												<!-- plots, custom html, or table -->
+												<div class="spyrePad--bottomM">
+													<div id="{{output['id']}}"></div>
+												</div>
+											{%- endif %}
+
+											{%- if output['type'] == "d3" %}
+												<!-- d3 figs go here -->
+												<div class="spyrePad--bottomM">
+													<div id="chart"></div>
+												</div>
+											{%- endif %}
+										{%- endif %}
+									{%- endfor %}
+								</div>
+							{%- endfor %}
+						</div>
+					</div>
+				{% else -%}	
+					{%- for output in outputs %}
+						<!-- plots, custom html, tables, anything not d3 -->
+						{% if output['type'] != "d3" -%}
+							<div class="spyrePad--bottomM">
+								<div id="{{output['id']}}"></div>
+								<div id="{{output['id']}}_spinner"></div>
+							</div>
+						{%- endif %}
+
+						{% if output['type'] == "d3" -%}
+							<!-- d3 figs go here -->
+							<div id="chart"></div>
+						{%- endif %}
+					{%- endfor %}
+				{%- endif %}
+			</div>
+		</div>
+	</body>
+</html>

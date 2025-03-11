@@ -1,0 +1,10 @@
+*.odt
+*.doc
+*.doxc
+
+test.py
+*_test.py
+test_*.py
+.venv
+.venv
+household_power_consumption.txt
